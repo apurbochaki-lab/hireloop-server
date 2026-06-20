@@ -14,6 +14,11 @@ app.get('/', (req, res) => {
     res.send('Hello World!')
 })
 
+// Middleware
+const logger = async (req, res, next) => {
+    console.log("Middleware Logged ✅");
+    next();
+}
 
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -40,6 +45,43 @@ async function run() {
         const applicationsCollection = database.collection("applications");
         const plansCollection = database.collection("plans");
         const subscriptionCollection = database.collection("subscriptions");
+        const sessionCollection = database.collection("session");
+
+        // Verification related
+        const verifyToken = async (req, res, next) => {
+
+            const authHeader = req.headers?.authorization; // Token with Bearer
+            if (!authHeader) {
+                return res.status(401).send({ success: false, message: 'Unauthorized access!' })
+            }
+
+            const token = authHeader.split(" ")[1];  // Select only token
+            if (!token) {
+                return res.status(401).send({ success: false, message: 'Unauthorized access!' })
+            }
+
+            // Match token to the session
+            const query = { token: token };
+            const session = await sessionCollection.findOne(query)
+            const userId = session.userId;  // userId of userColl
+
+            // Verify user from session userId, in user collection
+            const userQuery = { _id: userId };
+            const user = await userCollection.findOne(userQuery);
+            req.user = user; // Saved user data
+
+            console.log("Session : ", req.user);
+            next()
+        }
+
+        const verifySeeker = async (req, res, next) => {
+            if (req.user?.role !== "seeker") {
+                return res.status(403).send({ success: false, message: 'Forbidden access!' })
+            };
+
+            next();
+        }
+
 
         app.get('/api/users', async (req, res) => {
             const result = await userCollection.find().skip(5).toArray();
@@ -80,10 +122,13 @@ async function run() {
         })
 
         // Application related api
-        app.get('/api/application', async (req, res) => {
+        app.get('/api/application', verifyToken, verifySeeker, async (req, res) => {
             const query = {};
             if (req.query.applicantId) {
                 query.applicantId = req.query.applicantId;
+
+                // Check weather asking for user information that is valid user or someone else
+                console.log((req.user?._id).toString(), req.query.applicantId);
             }
             if (req.query.jobId) {
                 query.jobId = req.query.jobId;
@@ -105,7 +150,7 @@ async function run() {
         })
 
         // Company related api
-        app.get('/api/companies', async (req, res) => {
+        app.get('/api/companies', verifyToken, async (req, res) => {
             const result = await companyCollection.find().toArray();
             res.send(result)
         })
@@ -116,7 +161,6 @@ async function run() {
                 query.recruiterId = req.query.recruiterId;
             }
             const result = await companyCollection.findOne(query);
-            console.log(result)
             res.send(result || {});
         })
 
@@ -130,11 +174,9 @@ async function run() {
             res.send(result);
         })
 
-        app.patch('/api/companies/:id', async (req, res) => {
+        app.patch('/api/companies/:id', logger, verifyToken, async (req, res) => {
             const id = req.params.id;
             const updatedCompany = req.body;
-
-            console.log("Data:", updatedCompany)
 
             const filter = { _id: new ObjectId(id) };
             const updateDocument = {
