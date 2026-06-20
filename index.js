@@ -46,11 +46,6 @@ async function run() {
             res.send(result)
         })
 
-        app.get('/api/companies', async (req, res) => {
-            const result = await userCollection.find().skip(5).toArray();
-            res.send(result)
-        })
-
         // Job related api
         app.get('/api/jobs', async (req, res) => {
             const query = {};
@@ -110,6 +105,11 @@ async function run() {
         })
 
         // Company related api
+        app.get('/api/companies', async (req, res) => {
+            const result = await companyCollection.find().toArray();
+            res.send(result)
+        })
+
         app.get('/api/my/companies', async (req, res) => {
             const query = {};
             if (req.query.recruiterId) {
@@ -128,6 +128,23 @@ async function run() {
             }
             const result = await companyCollection.insertOne(newCompany);
             res.send(result);
+        })
+
+        app.patch('/api/companies/:id', async (req, res) => {
+            const id = req.params.id;
+            const updatedCompany = req.body;
+
+            console.log("Data:", updatedCompany)
+
+            const filter = { _id: new ObjectId(id) };
+            const updateDocument = {
+                $set: {
+                    status: updatedCompany.status
+                }
+            }
+
+            const result = await companyCollection.updateOne(filter, updateDocument);
+            res.json(result);
         })
 
         // Plans related api
