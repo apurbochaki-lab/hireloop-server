@@ -60,26 +60,47 @@ async function run() {
                 return res.status(401).send({ success: false, message: 'Unauthorized access!' })
             }
 
-            // Match token to the session
+            // Match token in the session
             const query = { token: token };
             const session = await sessionCollection.findOne(query)
-            const userId = session.userId;  // userId of userColl
+            if (!session) {
+                return res.status(401).send({ success: false, message: 'Unauthorized access!' })
+            }
+            const userId = session.userId;  // userId of user
 
-            // Verify user from session userId, in user collection
+            // Verify user from session userId, to user collection
             const userQuery = { _id: userId };
             const user = await userCollection.findOne(userQuery);
+            if (!user) {
+                return res.status(401).send({ success: false, message: 'Unauthorized access!' })
+            }
             req.user = user; // Saved user data
 
             console.log("Session : ", req.user);
             next()
         }
 
+        // Seeker role verification
         const verifySeeker = async (req, res, next) => {
             if (req.user?.role !== "seeker") {
                 return res.status(403).send({ success: false, message: 'Forbidden access!' })
             };
-
             next();
+        }
+
+        // Recruiter role verification
+        const verifyRecruiter = (req, res, next) => {
+            if (req.user?.role !== "recruiter") {
+                return res.status(403).send({ success: false, message: 'Forbidden access!' })
+            }
+        }
+
+        // Admin role verification
+        const verifyAdmin = async (req, res, next) => {
+            if (req.user?.role !== "admin") {
+                return res.status(403).send({ success: false, message: 'Forbidden access!' })
+            }
+            next()
         }
 
 
@@ -128,7 +149,9 @@ async function run() {
                 query.applicantId = req.query.applicantId;
 
                 // Check weather asking for user information that is valid user or someone else
-                console.log((req.user?._id).toString(), req.query.applicantId);
+                if (req.user?._id.toString() !== req.query.applicantId) {
+                    return res.status(403).send({ success: false, message: 'Forbidden Access' })
+                }
             }
             if (req.query.jobId) {
                 query.jobId = req.query.jobId;
@@ -150,7 +173,7 @@ async function run() {
         })
 
         // Company related api
-        app.get('/api/companies', verifyToken, async (req, res) => {
+        app.get('/api/companies', verifyToken, verifyAdmin, async (req, res) => {
             const result = await companyCollection.find().toArray();
             res.send(result)
         })
@@ -174,7 +197,7 @@ async function run() {
             res.send(result);
         })
 
-        app.patch('/api/companies/:id', logger, verifyToken, async (req, res) => {
+        app.patch('/api/companies/:id', verifyToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const updatedCompany = req.body;
 
